@@ -1,18 +1,28 @@
 """
-FastAPI application.
+FastAPI application — Vercel-compatible.
 
-Serves the frontend as static files and exposes:
-  GET  /api/sample-tickets   — list of pre-loaded sample tickets
-  GET  /api/status           — LLM backend status
-  WS   /ws/process           — WebSocket endpoint for pipeline streaming
+Endpoints:
+  GET  /                    → index.html
+  GET  /api/status          → LLM backend status
+  GET  /api/sample-tickets  → pre-loaded sample tickets
+  POST /api/process         → SSE stream of pipeline events
+                              (replaces WebSocket for Vercel compatibility)
 """
 
 import json
+import sys
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+# Ensure the backend/ directory is always on sys.path,
+# whether the server is started from project root or from backend/.
+_BACKEND = Path(__file__).parent
+if str(_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_BACKEND))
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from pipeline import run_pipeline
 
@@ -21,7 +31,6 @@ DATA_DIR = BASE / "data"
 FRONTEND_DIR = BASE.parent / "frontend"
 
 app = FastAPI(title="Multi-Agent Customer Support", version="1.0.0")
-
 
 # ---------------------------------------------------------------------------
 # Static frontend
@@ -37,7 +46,6 @@ async def root():
 
 @app.get("/favicon.ico")
 async def favicon():
-    # Return empty 204 to avoid browser noise
     from fastapi.responses import Response
     return Response(status_code=204)
 
@@ -54,7 +62,8 @@ async def get_sample_tickets():
 
 @app.get("/api/status")
 async def get_status():
-    import httpx
+    import httpx, os
+    # Check Ollama
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.get("http://localhost:11434/api/tags")
@@ -63,32 +72,46 @@ async def get_status():
                 return {"llm": "ollama", "available": True, "models": models}
     except Exception:
         pass
+    # Check Groq
+    if os.environ.get("GROQ_API_KEY"):
+        return {"llm": "groq", "available": True, "models": ["llama-3.1-8b-instant"]}
     return {"llm": "demo", "available": True, "models": ["demo-mode"]}
 
 
 # ---------------------------------------------------------------------------
-# WebSocket — pipeline streaming
+# SSE pipeline — works on Vercel, Railway, Render, and locally
 # ---------------------------------------------------------------------------
 
-@app.websocket("/ws/process")
-async def websocket_process(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        data = await websocket.receive_json()
-        ticket_text = data.get("ticket", "").strip()
-        plan = data.get("plan", "Professional")
+class TicketRequest(BaseModel):
+    ticket: str
+    plan: str = "Professional"
 
-        if not ticket_text:
-            await websocket.send_json({"type": "error", "message": "Empty ticket text"})
-            return
 
-        async for update in run_pipeline(ticket_text, plan):
-            await websocket.send_json(update)
+@app.post("/api/process")
+async def process_ticket(body: TicketRequest):
+    """
+    Streams pipeline events as Server-Sent Events (SSE).
+    Each event is a JSON object; the stream ends with data:[DONE].
+    """
+    ticket_text = body.ticket.strip()
+    if not ticket_text:
+        raise HTTPException(status_code=400, detail="Empty ticket text")
 
-    except WebSocketDisconnect:
-        pass
-    except Exception as exc:
+    async def event_stream():
         try:
-            await websocket.send_json({"type": "error", "message": str(exc)})
-        except Exception:
-            pass
+            async for update in run_pipeline(ticket_text, body.plan):
+                yield f"data: {json.dumps(update)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disables Nginx buffering
+            "Connection": "keep-alive",
+        },
+    )

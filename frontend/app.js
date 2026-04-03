@@ -6,19 +6,18 @@ const state = {
   currentResult: null,
   queue: [],
   stats: { total: 0, auto: 0, review: 0, escalated: 0 },
-  stepData: {},   // agent key → result data
+  stepData: {},
+  abortController: null,   // lets us cancel an in-flight request
 };
 
 const AGENT_META = {
-  novelty_detector:  { num: 1, label: 'Novelty Detector',      icon: '◈', verifier: false },
-  classifier:        { num: 2, label: 'Classifier',             icon: '⊞', verifier: false },
-  researcher:        { num: 3, label: 'Researcher (RAG)',       icon: '⊛', verifier: false },
-  responder:         { num: 4, label: 'Responder',              icon: '⊡', verifier: false },
-  grounding_checker: { num: 5, label: 'Grounding Checker',      icon: '✓', verifier: true  },
-  confidence_scorer: { num: 6, label: 'Confidence Scorer',      icon: '⊕', verifier: true  },
+  novelty_detector:  { num: 1, label: 'Novelty Detector',   verifier: false },
+  classifier:        { num: 2, label: 'Classifier',          verifier: false },
+  researcher:        { num: 3, label: 'Researcher (RAG)',    verifier: false },
+  responder:         { num: 4, label: 'Responder',           verifier: false },
+  grounding_checker: { num: 5, label: 'Grounding Checker',   verifier: true  },
+  confidence_scorer: { num: 6, label: 'Confidence Scorer',   verifier: true  },
 };
-
-const WS_URL = `ws://${location.host}/ws/process`;
 
 // ─────────────────────────── INIT ───────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -36,9 +35,12 @@ async function fetchStatus() {
     if (data.llm === 'ollama') {
       dot.className  = 'status-dot online';
       text.textContent = `Ollama · ${data.models[0] ?? 'unknown'}`;
+    } else if (data.llm === 'groq') {
+      dot.className  = 'status-dot online';
+      text.textContent = `Groq · ${data.models[0] ?? 'llama-3.1-8b'}`;
     } else {
       dot.className  = 'status-dot demo';
-      text.textContent = 'Demo mode (Ollama not running)';
+      text.textContent = 'Demo mode (no LLM configured)';
     }
   } catch {
     document.querySelector('.status-dot').className = 'status-dot offline';
@@ -78,7 +80,7 @@ function loadSample() {
 }
 
 // ─────────────────────────── PIPELINE RUNNER ───────────────────────────
-function processTicket() {
+async function processTicket() {
   const subject  = document.getElementById('ticketSubject').value.trim();
   const body     = document.getElementById('ticketBody').value.trim();
   const plan     = document.getElementById('ticketPlan').value;
@@ -91,35 +93,69 @@ function processTicket() {
   const ticket = subject ? `${subject}\n\n${body}` : body;
 
   // Reset UI
-  document.getElementById('emptyState').style.display      = 'none';
+  document.getElementById('emptyState').style.display       = 'none';
   document.getElementById('pipelineContainer').style.display = 'block';
-  document.getElementById('resultCard').style.display       = 'none';
+  document.getElementById('resultCard').style.display        = 'none';
   state.stepData = {};
 
   initPipelineSteps();
   disableButton(true);
 
-  const ws = new WebSocket(WS_URL);
+  // Cancel any previous in-flight request
+  if (state.abortController) state.abortController.abort();
+  state.abortController = new AbortController();
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    handlePipelineMessage(msg);
-  };
+  try {
+    const response = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket, plan }),
+      signal: state.abortController.signal,
+    });
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ ticket, plan }));
-  };
+    if (!response.ok) {
+      showError(`Server error: ${response.status} ${response.statusText}`);
+      disableButton(false);
+      return;
+    }
 
-  ws.onerror = () => {
+    // Parse SSE stream via ReadableStream
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Split on newlines; keep any incomplete line in buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop();   // last element may be incomplete
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') { disableButton(false); return; }
+        try {
+          handlePipelineMessage(JSON.parse(raw));
+        } catch {
+          // Malformed JSON line — skip silently
+        }
+      }
+    }
+
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      showError(`Connection failed: ${err.message}. Is the server running?`);
+    }
+  } finally {
     disableButton(false);
-    showError('WebSocket connection failed. Is the server running?');
-  };
-
-  ws.onclose = () => {
-    disableButton(false);
-  };
+  }
 }
 
+// ─────────────────────────── STEP STATE MANAGEMENT ───────────────────────────
 function initPipelineSteps() {
   const container = document.getElementById('pipelineSteps');
   container.innerHTML = '';
@@ -134,7 +170,7 @@ function initPipelineSteps() {
       <div class="step-header" onclick="toggleStep('${key}')">
         <div class="step-num">${meta.num}</div>
         <div class="step-label">
-          ${meta.verifier ? '<span style="font-size:0.65rem;background:#fef9c3;color:#a16207;border-radius:10px;padding:1px 6px;margin-right:4px;font-weight:600;">VERIFY</span>' : ''}
+          ${meta.verifier ? '<span class="verify-tag">VERIFY</span>' : ''}
           ${meta.label}
         </div>
         <div class="step-status">
@@ -178,16 +214,14 @@ function handlePipelineMessage(msg) {
   }
 }
 
-// ─────────────────────────── STEP STATE MANAGEMENT ───────────────────────────
 function setStepState(key, state_) {
   const card = document.getElementById(`step-${key}`);
   if (!card) return;
   card.className = `step-card state-${state_}`;
 
-  const statusEl = card.querySelector('.step-status-text');
   const statusWrap = card.querySelector('.step-status');
+  const statusEl   = card.querySelector('.step-status-text');
 
-  // Remove existing spinner
   const existingSpinner = statusWrap.querySelector('.spinner');
   if (existingSpinner) existingSpinner.remove();
 
@@ -196,13 +230,9 @@ function setStepState(key, state_) {
     const spinner = document.createElement('div');
     spinner.className = 'spinner';
     statusWrap.prepend(spinner);
-  } else if (state_ === 'done') {
-    statusEl.textContent = 'Done';
-  } else if (state_ === 'flagged') {
-    statusEl.textContent = 'Flagged';
-  } else if (state_ === 'error') {
-    statusEl.textContent = 'Error';
-  }
+  } else if (state_ === 'done')    { statusEl.textContent = 'Done'; }
+  else if (state_ === 'flagged')   { statusEl.textContent = 'Flagged'; }
+  else if (state_ === 'error')     { statusEl.textContent = 'Error'; }
 }
 
 function toggleStep(key) {
@@ -217,19 +247,18 @@ function renderStepBody(key, data) {
   if (!body) return;
 
   switch (key) {
-    case 'novelty_detector': body.innerHTML = renderNoveltyBody(data); break;
-    case 'classifier':       body.innerHTML = renderClassifierBody(data); break;
-    case 'researcher':       body.innerHTML = renderResearcherBody(data); break;
-    case 'responder':        body.innerHTML = renderResponderBody(data); break;
-    case 'grounding_checker': body.innerHTML = renderGroundingBody(data); break;
-    case 'confidence_scorer': body.innerHTML = renderScorerBody(data); break;
+    case 'novelty_detector':  body.innerHTML = renderNoveltyBody(data);   break;
+    case 'classifier':        body.innerHTML = renderClassifierBody(data); break;
+    case 'researcher':        body.innerHTML = renderResearcherBody(data); break;
+    case 'responder':         body.innerHTML = renderResponderBody(data);  break;
+    case 'grounding_checker': body.innerHTML = renderGroundingBody(data);  break;
+    case 'confidence_scorer': body.innerHTML = renderScorerBody(data);     break;
   }
 
-  // Auto-expand on done
+  // Auto-expand on completion
   const card = document.getElementById(`step-${key}`);
   if (card) card.classList.add('expanded');
 
-  // Update status badge in header
   updateStepBadge(key, data);
 }
 
@@ -255,10 +284,10 @@ function updateStepBadge(key, data) {
     const cls = r === 'AUTO_APPROVE' ? 'badge-auto' : r === 'LIGHT_REVIEW' ? 'badge-light' : 'badge-full';
     badge = `<span class="step-badge ${cls}">${data.routing_label ?? r}</span>`;
   } else if (data.elapsed_ms != null) {
-    badge = `<span style="font-size:0.72rem;color:var(--slate-400)">${data.elapsed_ms}ms</span>`;
+    badge = `<span style="font-size:.72rem;color:var(--slate-400)">${data.elapsed_ms}ms</span>`;
   }
 
-  const existing = statusWrap.querySelector('.step-badge');
+  const existing = statusWrap.querySelector('.step-badge, span[style]');
   if (existing) existing.remove();
 
   const statusText = statusWrap.querySelector('.step-status-text');
@@ -270,13 +299,14 @@ function updateStepBadge(key, data) {
   }
 }
 
+// ─────────────────────────── AGENT RENDERERS ───────────────────────────
 function renderNoveltyBody(d) {
   const simPct = Math.round((d.similarity_to_known ?? 0) * 100);
   const fillClass = d.is_novel ? 'fill-red' : 'fill-green';
   return `
     <div class="step-detail-grid">
       ${detailItem('Result',     d.is_novel ? '⚠ Novel ticket' : '✓ Known pattern')}
-      ${detailItem('Similarity', `${simPct}% to nearest known`)}
+      ${detailItem('Similarity', `${simPct}% to nearest`)}
       ${detailItem('Threshold',  `${Math.round((d.threshold ?? 0.45) * 100)}%`)}
       ${detailItem('Method',     d.method ?? '—')}
     </div>
@@ -284,8 +314,8 @@ function renderNoveltyBody(d) {
       <div class="score-bar-label"><span>Similarity to known distribution</span><span>${simPct}%</span></div>
       <div class="score-bar-track"><div class="score-bar-fill ${fillClass}" style="width:${simPct}%"></div></div>
     </div>
-    ${d.nearest_ticket ? `<div style="font-size:0.78rem;color:var(--slate-500);margin-top:0.4rem">Nearest known: <em>${escHtml(d.nearest_ticket)}</em></div>` : ''}
-    ${d.note ? `<div style="font-size:0.78rem;color:var(--slate-500);margin-top:0.5rem;padding:0.5rem;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200)">${escHtml(d.note)}</div>` : ''}
+    ${d.nearest_ticket ? `<p class="step-note">Nearest known: <em>${escHtml(d.nearest_ticket)}</em></p>` : ''}
+    ${d.note ? `<p class="step-note">${escHtml(d.note)}</p>` : ''}
   `;
 }
 
@@ -294,24 +324,22 @@ function renderClassifierBody(d) {
   const fillClass = confPct >= 75 ? 'fill-green' : confPct >= 55 ? 'fill-amber' : 'fill-red';
   return `
     <div class="step-detail-grid">
-      ${detailItem('Category', capitalize(d.category ?? '—'))}
-      ${detailItem('Priority', capitalize(d.priority ?? '—'))}
+      ${detailItem('Category',   capitalize(d.category ?? '—'))}
+      ${detailItem('Priority',   capitalize(d.priority ?? '—'))}
       ${detailItem('Confidence', `${confPct}%`)}
     </div>
     <div class="score-bar-wrap">
       <div class="score-bar-label"><span>Classifier confidence</span><span>${confPct}%</span></div>
       <div class="score-bar-track"><div class="score-bar-fill ${fillClass}" style="width:${confPct}%"></div></div>
     </div>
-    ${d.reasoning ? `<div style="font-size:0.78rem;color:var(--slate-500);margin-top:0.5rem">${escHtml(d.reasoning)}</div>` : ''}
+    ${d.reasoning ? `<p class="step-note">${escHtml(d.reasoning)}</p>` : ''}
   `;
 }
 
 function renderResearcherBody(d) {
   const articles = d.articles ?? [];
   return `
-    <div style="font-size:0.78rem;color:var(--slate-500);margin-bottom:0.6rem">
-      Retrieved ${articles.length} KB article(s) using ${d.method ?? 'semantic'} search.
-    </div>
+    <p class="step-note">Retrieved ${articles.length} KB article(s) using ${d.method ?? 'semantic'} search.</p>
     <div class="step-articles">
       ${articles.map(a => `
         <span class="article-chip">
@@ -325,9 +353,7 @@ function renderResearcherBody(d) {
 
 function renderResponderBody(d) {
   return `
-    <div style="font-size:0.78rem;color:var(--slate-500);margin-bottom:0.4rem">
-      Draft response (pre-verification):
-    </div>
+    <p class="step-note">Draft response (pre-verification):</p>
     <div class="step-draft">${escHtml(d.draft ?? '')}</div>
   `;
 }
@@ -348,13 +374,13 @@ function renderGroundingBody(d) {
       <div class="score-bar-track"><div class="score-bar-fill ${fillClass}" style="width:${pct}%"></div></div>
     </div>
     ${sentences.length > 0 ? `
-      <div style="margin-top:0.75rem;font-size:0.73rem;color:var(--slate-500);margin-bottom:0.35rem;font-weight:500">SENTENCE-LEVEL GROUNDING</div>
+      <p class="step-note" style="font-weight:600;margin-top:.6rem">Sentence-level grounding:</p>
       ${sentences.slice(0, 8).map(s => `
         <div class="grounding-row">
           <div class="grounding-dot ${s.grounded ? 'ok' : 'bad'}"></div>
-          <div style="flex:1">
+          <div>
             <span style="color:var(--slate-600)">${escHtml(s.sentence.slice(0, 120))}${s.sentence.length > 120 ? '…' : ''}</span>
-            <span style="font-size:0.68rem;color:var(--slate-400);margin-left:0.4rem">(${Math.round((s.score ?? 0) * 100)}% · ${s.source ?? ''})</span>
+            <span style="font-size:.68rem;color:var(--slate-400);margin-left:.4rem">(${Math.round((s.score ?? 0) * 100)}% · ${s.source ?? ''})</span>
           </div>
         </div>
       `).join('')}
@@ -368,16 +394,16 @@ function renderScorerBody(d) {
   const fillClass = finalPct >= 70 ? 'fill-green' : finalPct >= 50 ? 'fill-amber' : 'fill-red';
   return `
     <div class="step-detail-grid">
-      ${detailItem('Classifier score', `${Math.round((sc.classifier ?? 0) * 100)}%`)}
-      ${detailItem('Grounding score',  `${Math.round((sc.grounding ?? 0) * 100)}%`)}
-      ${detailItem('Novelty score',    `${Math.round((sc.novelty ?? 0) * 100)}%`)}
-      ${detailItem('Final confidence', `${finalPct}%`)}
+      ${detailItem('Classifier',   `${Math.round((sc.classifier ?? 0) * 100)}%`)}
+      ${detailItem('Grounding',    `${Math.round((sc.grounding ?? 0) * 100)}%`)}
+      ${detailItem('Novelty',      `${Math.round((sc.novelty ?? 0) * 100)}%`)}
+      ${detailItem('Final conf.',  `${finalPct}%`)}
     </div>
     <div class="score-bar-wrap">
       <div class="score-bar-label"><span>Final pipeline confidence</span><span>${finalPct}%</span></div>
       <div class="score-bar-track"><div class="score-bar-fill ${fillClass}" style="width:${finalPct}%"></div></div>
     </div>
-    <div style="font-size:0.78rem;color:var(--slate-500);margin-top:0.5rem;padding:0.5rem;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200)">
+    <div class="step-note" style="padding:.55rem .7rem;background:var(--beige-50);border:1px solid var(--beige-200);border-radius:6px;margin-top:.5rem">
       <strong>Routing: ${escHtml(d.routing_label ?? d.routing ?? '—')}</strong><br/>
       ${escHtml(d.routing_reason ?? '')}
     </div>
@@ -388,40 +414,33 @@ function renderScorerBody(d) {
 function renderResult(data) {
   document.getElementById('resultCard').style.display = 'block';
 
-  const cat  = capitalize(data.category  ?? '—');
-  const pri  = capitalize(data.priority  ?? '—');
+  const cat = capitalize(data.category ?? '—');
+  const pri = capitalize(data.priority  ?? '—');
   document.getElementById('resultMeta').textContent = `Category: ${cat}  ·  Priority: ${pri}`;
 
-  // Routing badge
   const rb = document.getElementById('routingBadge');
   const r  = data.routing ?? '';
   rb.textContent = data.routing_label ?? r;
   rb.className   = `routing-badge ${r === 'AUTO_APPROVE' ? 'auto' : r === 'LIGHT_REVIEW' ? 'light' : 'full'}`;
 
-  // Confidence bar
   const pct = Math.round((data.final_confidence ?? 0) * 100);
   document.getElementById('confidenceValue').textContent = `${pct}%`;
   const fill = document.getElementById('confidenceFill');
   fill.style.width = `${pct}%`;
-  fill.className = `confidence-bar-fill ${pct >= 70 ? 'fill-green' : pct >= 50 ? 'fill-amber' : 'fill-red'}`;
+  fill.className   = `confidence-bar-fill ${pct >= 70 ? 'fill-green' : pct >= 50 ? 'fill-amber' : 'fill-red'}`;
 
-  // Routing reason
   document.getElementById('routingReason').textContent = data.routing_reason ?? '';
 
-  // Grounding pills
-  const pillsEl = document.getElementById('groundingPills');
-  const gPct    = Math.round((data.grounding_score ?? 0) * 100);
-  const gClass  = gPct >= 80 ? 'pill-green' : gPct >= 60 ? 'pill-amber' : 'pill-slate';
-  pillsEl.innerHTML = `
+  const gPct   = Math.round((data.grounding_score ?? 0) * 100);
+  const gClass = gPct >= 80 ? 'pill-green' : gPct >= 60 ? 'pill-amber' : 'pill-slate';
+  document.getElementById('groundingPills').innerHTML = `
     <span class="pill pill-blue">📋 ${data.claims_checked ?? 0} claims checked</span>
     <span class="pill ${gClass}">✓ ${gPct}% grounded</span>
     ${data.is_novel ? '<span class="pill pill-amber">⚠ Novel ticket</span>' : ''}
   `;
 
-  // Response
   document.getElementById('responseBody').textContent = data.verified_response ?? '';
 
-  // Scroll to result
   setTimeout(() => {
     document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
@@ -452,68 +471,51 @@ function toggleQueue() {
 
 function sendToQueue() {
   if (!state.currentResult) return;
-
   const subject  = document.getElementById('ticketSubject').value.trim() || 'Untitled ticket';
   const body     = document.getElementById('ticketBody').value.trim();
   const customer = document.getElementById('ticketCustomer').value.trim();
 
-  const item = {
-    id:       `Q${String(state.queue.length + 1).padStart(3, '0')}`,
-    subject,
-    body,
-    customer,
-    routing:  state.currentResult.routing,
-    category: state.currentResult.category,
-    priority: state.currentResult.priority,
+  state.queue.push({
+    id:         `Q${String(state.queue.length + 1).padStart(3, '0')}`,
+    subject, body, customer,
+    routing:    state.currentResult.routing,
+    category:   state.currentResult.category,
+    priority:   state.currentResult.priority,
     confidence: state.currentResult.final_confidence,
-    response: state.currentResult.verified_response,
-    timestamp: new Date().toLocaleTimeString(),
-  };
+    response:   state.currentResult.verified_response,
+    timestamp:  new Date().toLocaleTimeString(),
+  });
 
-  state.queue.push(item);
+  document.getElementById('queueCount').textContent = state.queue.length;
   renderQueue();
-
-  const badge = document.getElementById('queueCount');
-  badge.textContent = state.queue.length;
-
   toggleQueue();
 }
 
 function renderQueue() {
   const list = document.getElementById('queueList');
-
   if (state.queue.length === 0) {
     list.innerHTML = '<div class="queue-empty">No tickets in queue</div>';
     return;
   }
-
   list.innerHTML = state.queue.slice().reverse().map(item => {
-    const routingClass = item.routing === 'AUTO_APPROVE' ? 'badge-auto' : item.routing === 'LIGHT_REVIEW' ? 'badge-light' : 'badge-full';
+    const cls = item.routing === 'AUTO_APPROVE' ? 'badge-auto' : item.routing === 'LIGHT_REVIEW' ? 'badge-light' : 'badge-full';
     return `
       <div class="queue-ticket">
         <div class="queue-ticket-header">
           <div class="queue-ticket-subject">${escHtml(item.subject)}</div>
-          <span class="step-badge ${routingClass}" style="font-size:0.65rem;white-space:nowrap">${escHtml(capitalize(item.routing?.replace('_', ' ') ?? ''))}</span>
+          <span class="step-badge ${cls}" style="font-size:.65rem;white-space:nowrap">${escHtml(capitalize(item.routing?.replace('_', ' ') ?? ''))}</span>
         </div>
         <div class="queue-ticket-meta">${escHtml(item.id)} · ${escHtml(item.customer || 'Unknown')} · ${item.timestamp}</div>
         <div class="queue-ticket-preview">${escHtml(item.body)}</div>
         <div class="queue-ticket-footer">
-          <span class="pill pill-blue" style="font-size:0.68rem">${capitalize(item.category ?? '—')}</span>
-          <span class="pill pill-slate" style="font-size:0.68rem">${Math.round((item.confidence ?? 0) * 100)}% confidence</span>
+          <span class="pill pill-blue" style="font-size:.68rem">${capitalize(item.category ?? '—')}</span>
+          <span class="pill pill-slate" style="font-size:.68rem">${Math.round((item.confidence ?? 0) * 100)}% confidence</span>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
 // ─────────────────────────── MODAL ───────────────────────────
-function openModal(title, content) {
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalBody').innerHTML    = content;
-  document.getElementById('modalOverlay').classList.add('visible');
-  document.getElementById('agentModal').classList.add('visible');
-}
-
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('visible');
   document.getElementById('agentModal').classList.remove('visible');
@@ -521,6 +523,7 @@ function closeModal() {
 
 // ─────────────────────────── UTILITIES ───────────────────────────
 function resetPipeline() {
+  if (state.abortController) state.abortController.abort();
   document.getElementById('pipelineContainer').style.display = 'none';
   document.getElementById('resultCard').style.display        = 'none';
   document.getElementById('emptyState').style.display        = 'block';
@@ -536,7 +539,7 @@ function disableButton(disabled) {
   const btn = document.getElementById('btnProcess');
   btn.disabled = disabled;
   btn.innerHTML = disabled
-    ? `<div class="spinner" style="width:16px;height:16px;border-color:rgba(255,255,255,0.3);border-top-color:#fff"></div> Processing…`
+    ? `<div class="spinner" style="width:16px;height:16px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></div> Processing…`
     : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Pipeline`;
 }
 
@@ -552,20 +555,18 @@ function copyResponse() {
 
 function showError(msg) {
   const container = document.getElementById('pipelineSteps');
-  const errEl     = document.createElement('div');
-  errEl.style.cssText = 'padding:1rem;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;font-size:0.83rem;color:#b91c1c;margin-top:0.5rem';
+  const errEl = document.createElement('div');
+  errEl.style.cssText = 'padding:1rem;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;font-size:.83rem;color:#b91c1c;margin-top:.5rem';
   errEl.textContent   = `Error: ${msg}`;
   container.appendChild(errEl);
 }
 
 function shakeElement(el) {
-  el.style.animation = 'none';
+  el.style.animation  = 'none';
   el.offsetHeight;
-  el.style.animation = 'shake 0.3s ease';
+  el.style.animation  = 'shake .3s ease';
   el.style.borderColor = 'var(--red-600)';
-  setTimeout(() => {
-    el.style.borderColor = '';
-  }, 1200);
+  setTimeout(() => { el.style.borderColor = ''; }, 1200);
 }
 
 function detailItem(key, val) {
@@ -573,8 +574,7 @@ function detailItem(key, val) {
     <div class="detail-item">
       <div class="detail-key">${escHtml(key)}</div>
       <div class="detail-val">${escHtml(String(val))}</div>
-    </div>
-  `;
+    </div>`;
 }
 
 function capitalize(str) {
@@ -583,23 +583,27 @@ function capitalize(str) {
 }
 
 function escHtml(str) {
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Inject shake keyframes
+// Inject keyframe animations
 const style = document.createElement('style');
 style.textContent = `
   @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    20%       { transform: translateX(-6px); }
-    40%       { transform: translateX(6px); }
-    60%       { transform: translateX(-4px); }
-    80%       { transform: translateX(4px); }
+    0%,100% { transform:translateX(0); }
+    20%      { transform:translateX(-6px); }
+    40%      { transform:translateX(6px); }
+    60%      { transform:translateX(-4px); }
+    80%      { transform:translateX(4px); }
+  }
+  .verify-tag {
+    font-size:.63rem; background:var(--amber-100); color:var(--amber-700);
+    border-radius:10px; padding:1px 6px; margin-right:4px; font-weight:600;
+  }
+  .step-note {
+    font-size:.78rem; color:var(--slate-500); margin-top:.4rem; line-height:1.5;
   }
 `;
 document.head.appendChild(style);

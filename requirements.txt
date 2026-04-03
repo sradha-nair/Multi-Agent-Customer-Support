@@ -1,0 +1,9 @@
+# Root-level requirements for Vercel deployment.
+# Heavy ML deps (sentence-transformers, torch) are intentionally excluded —
+# the pipeline uses a TF-IDF fallback that fits within Vercel's 50MB limit.
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+httpx>=0.27.0
+numpy>=1.26.0
+scikit-learn>=1.3.0
+python-multipart>=0.0.9
