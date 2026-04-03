@@ -1,23 +1,11 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "backend/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "backend/main.py"
-    }
-  ],
-  "functions": {
-    "backend/main.py": {
-      "maxDuration": 60
+  "experimentalServices": {
+    "frontend": {
+      "routePrefix": "/"
+    },
+    "backend": {
+      "entrypoint": "backend/main.py",
+      "routePrefix": "/_/backend"
     }
   }
 }
