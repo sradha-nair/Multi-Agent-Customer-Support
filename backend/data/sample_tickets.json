@@ -1,0 +1,82 @@
+[
+  {
+    "id": "T001",
+    "subject": "Locked out of account after IT reset our SSO",
+    "body": "Hi, our IT team updated our Okta SAML configuration yesterday and now none of our 18 users can log in. We're getting 'Authentication failed' on every attempt. We have a critical client presentation in 3 hours and our team needs access urgently. We're on the Professional plan. Account admin email is sarah.chen@techcorp.io. Please help ASAP.",
+    "customer": "Sarah Chen",
+    "company": "TechCorp Solutions",
+    "plan": "Professional"
+  },
+  {
+    "id": "T002",
+    "subject": "Charged twice for last month's subscription",
+    "body": "Hello, I noticed that our credit card was charged $299 twice on March 1st — once at 00:14 UTC and again at 02:37 UTC. Our account is under the Professional plan. The duplicate charge reference numbers are TXN-88291 and TXN-88304. Could you please investigate and refund the duplicate payment? I've attached our bank statement for reference.",
+    "customer": "Marcus Webb",
+    "company": "Brightline Analytics",
+    "plan": "Professional"
+  },
+  {
+    "id": "T003",
+    "subject": "API returning 429 errors in production",
+    "body": "We're hitting rate limits on your API despite being within what we thought were our limits. We're on the Starter plan and sending about 45 requests/minute — well under the 60/min limit. But we're getting HTTP 429 responses intermittently since this morning. Our API key is ak_prod_7x9z. Is there a secondary limit we're hitting? This is affecting our production application.",
+    "customer": "Dev Team",
+    "company": "Momentum Labs",
+    "plan": "Starter"
+  },
+  {
+    "id": "T004",
+    "subject": "Need to transfer admin access — founder leaving",
+    "body": "Our company founder and current account admin, James Park, is leaving the company next Friday. We need to transfer admin ownership to our new CTO, Priya Sharma (priya.sharma@novacorp.com). James will not be available after the 14th. What's the process for this? We don't want to lose access to billing and settings. We're an Enterprise customer.",
+    "customer": "HR Team",
+    "company": "Nova Corp",
+    "plan": "Enterprise"
+  },
+  {
+    "id": "T005",
+    "subject": "Dashboard taking 25+ seconds to load",
+    "body": "Our main operations dashboard has become extremely slow over the past week. It used to load in under 3 seconds, now it's taking 25-30 seconds and sometimes timing out entirely. We have 12 widgets on the dashboard, and we're looking at data for the past 6 months. This is causing significant disruption for our team. Account ID: ACC-10442.",
+    "customer": "Ops Team",
+    "company": "Flowstate Inc",
+    "plan": "Professional"
+  },
+  {
+    "id": "T006",
+    "subject": "Webhook deliveries failing silently since yesterday",
+    "body": "Our order processing webhook stopped receiving events yesterday around 14:30 UTC. The endpoint is returning 200 OK (we checked our server logs), but no events are being delivered. We've checked the webhook settings and it still shows 'active'. This is critical — we're missing order updates and customers aren't getting confirmations. Webhook ID: wh_4482.",
+    "customer": "Backend Team",
+    "company": "Retailify",
+    "plan": "Professional"
+  },
+  {
+    "id": "T007",
+    "subject": "Request for bulk CSV export with custom fields",
+    "body": "Hi, we'd like to export our data with some custom fields that aren't in the standard export (specifically: 'custom_segment', 'account_tier', and 'last_reviewed_by'). The standard JSON export includes them but the CSV does not. Is there a way to include custom fields in CSV exports, or is this something on your roadmap? We process the CSV in Excel and switching to JSON is not feasible for our team.",
+    "customer": "Data Team",
+    "company": "Prism Partners",
+    "plan": "Professional"
+  },
+  {
+    "id": "T008",
+    "subject": "Requesting refund — cancelled within first week",
+    "body": "We signed up for the Professional plan on March 25th and have decided it's not the right fit for our current stage. We'd like to cancel and request a full refund. We've barely used the product — just the onboarding call and initial setup. Our account email is team@startupxyz.com. We're within the 30-day window. Please confirm the process and timeline for the refund.",
+    "customer": "Operations",
+    "company": "StartupXYZ",
+    "plan": "Professional"
+  },
+  {
+    "id": "T009",
+    "subject": "SLA breach — 4 hours of downtime last Tuesday",
+    "body": "Your platform was completely unavailable for us from 09:15 to 13:20 UTC on March 26th — that's over 4 hours. This is a clear breach of the 99.9% uptime SLA. We have timestamped monitoring logs confirming the outage. We're an Enterprise customer and this caused us to miss a contractual commitment to our own client. We are requesting SLA credits and an explanation of what happened and what you're doing to prevent recurrence.",
+    "customer": "CTO Office",
+    "company": "Enterprise Solutions Ltd",
+    "plan": "Enterprise"
+  },
+  {
+    "id": "T010",
+    "subject": "Salesforce integration stopped syncing after update",
+    "body": "Our Salesforce integration was working fine until yesterday. After your platform update (we saw the maintenance notification), the sync stopped. Salesforce is showing the last successful sync as March 30th at 11:42 UTC. We've tried revoking and re-authorizing the OAuth connection twice but it's still not syncing. Manual sync trigger also fails with 'Integration error: upstream timeout'. We need this resolved urgently — our sales team relies on this data.",
+    "customer": "RevOps Team",
+    "company": "GrowthScale",
+    "plan": "Professional"
+  }
+]

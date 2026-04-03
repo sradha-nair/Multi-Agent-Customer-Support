@@ -1,0 +1,74 @@
+[
+  {
+    "id": "kb001",
+    "title": "Billing & Subscription Plans",
+    "category": "billing",
+    "content": "Our platform offers three tiers: Starter ($99/month, up to 5 users), Professional ($299/month, up to 25 users), and Enterprise (custom pricing, unlimited users). All plans are billed monthly or annually; annual plans receive a 20% discount. Invoices are generated on the 1st of each month and sent to the billing contact on file. Payment is due within 15 days of invoice date. Accepted payment methods: credit card, ACH bank transfer, and wire transfer for Enterprise customers."
+  },
+  {
+    "id": "kb002",
+    "title": "Refund Policy",
+    "category": "billing",
+    "content": "We offer a 30-day money-back guarantee for new subscriptions. Refund requests must be submitted within 30 days of the initial purchase. Refunds are processed within 5–7 business days to the original payment method. Partial-month refunds are calculated on a pro-rata daily basis. Annual subscriptions cancelled after the first 30 days are not eligible for a full refund but may receive a pro-rated credit for unused months applied to a future invoice. Enterprise custom terms may vary — refer to your signed Order Form."
+  },
+  {
+    "id": "kb003",
+    "title": "SLA & Uptime Guarantee",
+    "category": "sla",
+    "content": "We guarantee 99.9% monthly uptime for Professional and Enterprise plans (equivalent to ≤43.8 minutes of downtime per month). Starter plans have a 99.5% uptime guarantee. Scheduled maintenance windows (announced 72 hours in advance) do not count against uptime. If uptime falls below the guaranteed level, customers are entitled to service credits: 10% credit for 99.0–99.8% uptime, 25% credit for 98.0–98.9% uptime, 50% credit for below 98.0%. Credits must be requested within 30 days of the incident by emailing support@company.com with the incident reference number. Credits are applied to the next invoice and cannot be exchanged for cash."
+  },
+  {
+    "id": "kb004",
+    "title": "API Authentication & Rate Limits",
+    "category": "technical",
+    "content": "Our REST API uses Bearer token authentication. API keys are generated in Settings → API → Generate Key. Each key has a configurable expiry (default: never). Rate limits: Starter: 60 requests/minute, 10,000/day. Professional: 300 requests/minute, 100,000/day. Enterprise: 1,000 requests/minute, unlimited/day. If you exceed the rate limit, the API returns HTTP 429 with a Retry-After header indicating when to retry. Rate limits reset every 60 seconds (per-minute limits) and at midnight UTC (per-day limits). Enterprise customers can request temporary limit increases by contacting their account manager."
+  },
+  {
+    "id": "kb005",
+    "title": "Single Sign-On (SSO) Configuration",
+    "category": "technical",
+    "content": "SSO is available on Professional and Enterprise plans. Supported protocols: SAML 2.0 and OAuth 2.0 / OpenID Connect. To configure SAML: navigate to Settings → Security → SSO, enter your IdP metadata URL or upload the XML file, set the assertion consumer service URL to https://app.company.com/auth/saml/callback, and enable the integration. For Azure AD, Okta, and Google Workspace, step-by-step guides are available in our documentation. Common issues: ensure the NameID format is set to 'emailAddress', and that the IdP clock is within 5 minutes of UTC. If SSO is misconfigured and users are locked out, a recovery URL is available at https://app.company.com/auth/local-recovery (requires admin privileges)."
+  },
+  {
+    "id": "kb006",
+    "title": "Account Management & User Roles",
+    "category": "account",
+    "content": "Accounts have three role types: Admin (full access, can manage billing and users), Manager (can manage projects and team members, no billing access), and Member (project access only, as assigned). Admins can invite users via Settings → Team → Invite. If an Admin leaves the organisation and no other Admin exists, contact support with proof of company ownership (Companies House number or equivalent) to transfer Admin rights. Account ownership transfers require written confirmation from the outgoing account owner or legal documentation. Users can be deactivated (preserving their data and history) or permanently deleted. Permanent deletion removes all associated data and cannot be undone."
+  },
+  {
+    "id": "kb007",
+    "title": "Data Export & Backup",
+    "category": "data",
+    "content": "All plans support data export in JSON and CSV formats. To export: go to Settings → Data → Export, select the date range and data types, and click Export. Large exports (>500MB) are queued and you will receive an email with a download link within 1 hour. Download links expire after 48 hours. Automated daily backups are retained for 30 days (Professional) or 90 days (Enterprise). Point-in-time restore is available for Enterprise customers — contact support with the specific timestamp and data scope. We do not support direct database access or custom export formats. GDPR data subject access requests must be submitted via the DPA contact in your contract."
+  },
+  {
+    "id": "kb008",
+    "title": "Webhook Configuration & Troubleshooting",
+    "category": "technical",
+    "content": "Webhooks are configured in Settings → Integrations → Webhooks. Each webhook requires an endpoint URL (must return HTTP 200–299 within 10 seconds) and a signing secret for payload verification. We retry failed deliveries up to 5 times with exponential backoff (1m, 5m, 30m, 2h, 8h). After 5 failures, the webhook is automatically disabled and the account admin is notified by email. To re-enable: fix the endpoint issue, then toggle the webhook back on in settings. Webhook logs (including request/response headers and bodies) are available for the last 72 hours in Settings → Integrations → Webhooks → Logs. Common failure causes: endpoint not responding within 10s, SSL certificate errors, or firewall blocking our IP ranges (documented at docs.company.com/webhook-ips)."
+  },
+  {
+    "id": "kb009",
+    "title": "Performance & Scaling",
+    "category": "technical",
+    "content": "Dashboard load times vary by data volume. If dashboards are loading slowly (>5 seconds), common causes include: large date ranges (try reducing to 30 days or less), too many concurrent widgets (>20 per dashboard), or scheduled reports running simultaneously. To improve performance: use dashboard filters to limit data scope, schedule reports during off-peak hours (2am–6am UTC), or enable data caching in Settings → Performance. If performance issues persist after these steps, our engineering team can analyse your usage patterns — contact support with your account ID and a description of the slow queries or pages. Enterprise customers have dedicated infrastructure and should contact their account manager for capacity reviews."
+  },
+  {
+    "id": "kb010",
+    "title": "Onboarding & Implementation",
+    "category": "onboarding",
+    "content": "New accounts have a 14-day onboarding period with access to our implementation team. Standard onboarding includes: initial setup call (30 min), data import assistance, and up to 3 hours of configuration support. Enterprise onboarding includes a dedicated implementation manager, custom data migration, SSO setup, and user training sessions. The onboarding checklist in your dashboard tracks completion of key setup steps. If your onboarding period has expired but you need additional help, Professional customers can purchase additional support hours ($150/hour). Enterprise customers should contact their account manager to schedule a review session."
+  },
+  {
+    "id": "kb011",
+    "title": "Security & Compliance",
+    "category": "security",
+    "content": "We are SOC 2 Type II certified and GDPR compliant. Data is encrypted at rest (AES-256) and in transit (TLS 1.2+). Our infrastructure is hosted on AWS in eu-west-1 (EU customers) and us-east-1 (US customers). EU customers' data does not leave the EU. We conduct annual penetration tests; reports are available to Enterprise customers under NDA. For security vulnerability reports, use our responsible disclosure programme at security.company.com. Two-factor authentication (TOTP or SMS) is available for all plans and can be enforced company-wide by Admins in Settings → Security. IP allowlisting is available on Enterprise plans."
+  },
+  {
+    "id": "kb012",
+    "title": "Integrations & Third-Party Connections",
+    "category": "integrations",
+    "content": "We natively integrate with: Salesforce, HubSpot, Slack, Microsoft Teams, Jira, Zendesk, and Zapier. OAuth-based integrations are authorised in Settings → Integrations. If an integration stops working, first revoke and re-authorise it — this resolves 80% of issues. Salesforce sync runs every 15 minutes; manual sync can be triggered from the integration settings page. Custom integrations can be built using our REST API and webhooks. An official Python SDK and JavaScript SDK are available on GitHub. For Zapier integration issues, Zapier support handles their side; we handle issues with our Zapier app specifically."
+  }
+]
