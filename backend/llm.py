@@ -16,6 +16,9 @@ import re
 import httpx
 import asyncio
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 OLLAMA_BASE   = "http://localhost:11434"
 OLLAMA_MODEL  = "llama3.2"
@@ -45,7 +48,7 @@ async def _ollama_generate(prompt: str) -> str:
 # ─────────────────────────── Groq ───────────────────────────
 
 def _groq_key() -> str:
-    return os.environ.get("GROQ_API_KEY", "")
+    return os.getenv("GROQ_API_KEY", "")
 
 
 async def _groq_generate(prompt: str) -> str:
