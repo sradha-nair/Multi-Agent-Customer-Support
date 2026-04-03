@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SupportFlow — Multi-Agent Customer Support</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ─────────────────────────────── HEADER ─────────────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">SupportFlow</div>
+        <div class="brand-tagline">Multi-Agent Customer Support Pipeline</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-badge" id="llmStatus">
+        <span class="status-dot"></span>
+        <span class="status-text">Checking…</span>
+      </div>
+      <button class="btn-secondary" id="btnQueue" onclick="toggleQueue()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Review Queue
+        <span class="queue-badge" id="queueCount">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ─────────────────────────── MAIN LAYOUT ─────────────────────────── -->
+<main class="main-layout">
+
+  <!-- LEFT PANEL: ticket input -->
+  <section class="panel panel-input">
+    <div class="panel-header">
+      <h2 class="panel-title">Submit Ticket</h2>
+    </div>
+
+    <!-- Sample ticket selector -->
+    <div class="form-group">
+      <label class="form-label">Load sample ticket</label>
+      <div class="sample-select-wrap">
+        <select class="form-select" id="sampleSelect" onchange="loadSample()">
+          <option value="">— choose a sample —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider-text"><span>or write your own</span></div>
+
+    <div class="form-group">
+      <label class="form-label">Subject</label>
+      <input class="form-input" id="ticketSubject" type="text" placeholder="Brief description of the issue…" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Message</label>
+      <textarea class="form-textarea" id="ticketBody" rows="8"
+        placeholder="Describe your issue in detail. Include error messages, steps to reproduce, and business impact…"></textarea>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group form-group-sm">
+        <label class="form-label">Plan</label>
+        <select class="form-select" id="ticketPlan">
+          <option value="Starter">Starter</option>
+          <option value="Professional" selected>Professional</option>
+          <option value="Enterprise">Enterprise</option>
+        </select>
+      </div>
+      <div class="form-group form-group-sm">
+        <label class="form-label">Customer</label>
+        <input class="form-input" id="ticketCustomer" type="text" placeholder="Name / Company" />
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btnProcess" onclick="processTicket()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Run Pipeline
+    </button>
+
+    <!-- Quick stats -->
+    <div class="stats-row" id="sessionStats" style="display:none">
+      <div class="stat-chip">
+        <span class="stat-value" id="statTotal">0</span>
+        <span class="stat-label">Processed</span>
+      </div>
+      <div class="stat-chip stat-green">
+        <span class="stat-value" id="statAuto">0</span>
+        <span class="stat-label">Auto-approved</span>
+      </div>
+      <div class="stat-chip stat-amber">
+        <span class="stat-value" id="statReview">0</span>
+        <span class="stat-label">Reviewed</span>
+      </div>
+      <div class="stat-chip stat-red">
+        <span class="stat-value" id="statEscalated">0</span>
+        <span class="stat-label">Escalated</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT PANEL: pipeline + results -->
+  <section class="panel panel-pipeline">
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+      </div>
+      <div class="empty-title">Pipeline ready</div>
+      <div class="empty-sub">Submit a ticket to watch the six agents process it in real time.</div>
+    </div>
+
+    <!-- Pipeline steps (shown during/after processing) -->
+    <div class="pipeline-container" id="pipelineContainer" style="display:none">
+      <div class="pipeline-header-row">
+        <h2 class="panel-title">Pipeline</h2>
+        <button class="btn-ghost" onclick="resetPipeline()">New ticket</button>
+      </div>
+
+      <div class="pipeline-steps" id="pipelineSteps">
+        <!-- Steps injected by JS -->
+      </div>
+    </div>
+
+    <!-- Final result -->
+    <div class="result-card" id="resultCard" style="display:none">
+      <div class="result-header">
+        <div>
+          <div class="result-title">Final Output</div>
+          <div class="result-meta" id="resultMeta"></div>
+        </div>
+        <div class="routing-badge" id="routingBadge"></div>
+      </div>
+
+      <div class="confidence-bar-wrap">
+        <div class="confidence-bar-label">
+          <span>Pipeline confidence</span>
+          <span id="confidenceValue">—</span>
+        </div>
+        <div class="confidence-bar-track">
+          <div class="confidence-bar-fill" id="confidenceFill"></div>
+        </div>
+        <div class="confidence-ticks">
+          <span>Escalate</span>
+          <span style="margin-left:25%">Light review</span>
+          <span style="margin-left:auto">Auto-approve</span>
+        </div>
+      </div>
+
+      <div class="routing-reason" id="routingReason"></div>
+
+      <div class="grounding-pills" id="groundingPills"></div>
+
+      <div class="response-label">Verified Response</div>
+      <div class="response-body" id="responseBody"></div>
+
+      <div class="result-actions">
+        <button class="btn-secondary" onclick="copyResponse()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy response
+        </button>
+        <button class="btn-secondary" onclick="sendToQueue()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+          </svg>
+          Send to queue
+        </button>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ─────────────────────────── REVIEW QUEUE DRAWER ─────────────────────────── -->
+<div class="queue-overlay" id="queueOverlay" onclick="toggleQueue()"></div>
+<aside class="queue-drawer" id="queueDrawer">
+  <div class="queue-drawer-header">
+    <h3>Human Review Queue</h3>
+    <button class="btn-ghost" onclick="toggleQueue()">✕</button>
+  </div>
+  <div class="queue-description">
+    Tickets routed here require human review before a response is sent.
+    The review process uses structured independence: reviewers classify
+    tickets independently before seeing the AI's draft.
+  </div>
+  <div class="queue-list" id="queueList">
+    <div class="queue-empty">No tickets in queue</div>
+  </div>
+</aside>
+
+<!-- ─────────────────────────── AGENT DETAIL MODAL ─────────────────────────── -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+<div class="modal" id="agentModal">
+  <div class="modal-header">
+    <h3 id="modalTitle">Agent Output</h3>
+    <button class="btn-ghost" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body" id="modalBody"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
