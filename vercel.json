@@ -1,11 +1,15 @@
 {
-  "experimentalServices": {
-    "frontend": {
-      "routePrefix": "/"
-    },
-    "backend": {
-      "entrypoint": "backend/main.py",
-      "routePrefix": "/_/backend"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "backend/main.py": {
+      "maxDuration": 60,
+      "includeFiles": "frontend/**"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/backend/main.py"
+    }
+  ]
 }
