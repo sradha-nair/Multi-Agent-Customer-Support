@@ -1,6 +1,5 @@
-# SupportFlow — Multi-Agent Customer Support Pipeline
+# Multi-Agent Customer Support Pipeline Prototype
 
-A working prototype of the multi-agent verification architecture described in the accompanying research note. Built with FastAPI, sentence-transformers, and Ollama (with a full demo-mode fallback).
 
 ---
 
