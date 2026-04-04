@@ -156,14 +156,3 @@ These also serve as the "known distribution" corpus for the novelty detector.
     └── app.js             WebSocket client + real-time pipeline rendering
 ```
 
----
-
-## One Unexpected Observation
-
-The grounding checker removes sentences with cosine similarity below 0.18 — a deliberately permissive threshold. I expected it to catch hallucinated specifics (invented prices, fake policy details). What I did not expect: it most consistently flags *transitional and hedging sentences* — phrases like "While I can't commit to a specific timeline…" or "If this issue is time-sensitive, please reply…" — because these have low semantic overlap with any KB article.
-
-These sentences are actually harmless and often good practice in support writing. But the grounding checker has no way to distinguish "ungrounded because fabricated" from "ungrounded because conversational." The removal makes the verified response more terse and factual, but occasionally more abrupt.
-
-This is a real tradeoff that emerges directly from the research note's point about verification systems having their own failure modes. A grounding check is the only deterministic layer in the pipeline — but "deterministic" does not mean "correct." It means consistently wrong in the same direction. The fix would be to classify sentence types first and only apply grounding checks to factual claim sentences, not transitional or closing language. That would require a sentence-type classifier as a pre-pass — adding another agent, more latency, and its own failure modes.
-
-The research note argues that reliability is not about making fewer errors; it's about knowing when you're in territory where you might be wrong. The grounding checker does know — it outputs scores and labels every sentence. The question is what you do with that knowledge, and whether removal is always the right response.
