@@ -42,41 +42,40 @@ Everything runs locally. No external API keys are required at any point. If Olla
 
 ## Pipeline Architecture
 
-The pipeline implements the three-layer verification architecture from the research note.
 
 ```
 Input ticket
      │
      ▼
 ┌─────────────────────┐
-│  1. Novelty Detector │  ← Pre-filter: is this ticket in-distribution?
+│  1. Novelty Detector│  ← Pre-filter: is this ticket in-distribution?
 └─────────┬───────────┘
           │
           ▼
 ┌─────────────────────┐
-│  2. Classifier       │  ← Category + priority + confidence (LLM)
+│  2. Classifier      │  ← Category + priority + confidence (LLM)
 └─────────┬───────────┘
           │
           ▼
 ┌─────────────────────┐
-│  3. Researcher (RAG) │  ← Semantic retrieval from knowledge base
+│  3. Researcher (RAG)│  ← Semantic retrieval from knowledge base
 └─────────┬───────────┘
           │
           ▼
 ┌─────────────────────┐
-│  4. Responder        │  ← Draft response (LLM, grounded in KB context)
+│  4. Responder       │  ← Draft response (LLM, grounded in KB context)
 └─────────┬───────────┘
           │
           ▼
 ┌──────────────────────────────┐
 │  5. Grounding Checker  ✓     │  ← VERIFICATION LAYER 1
-│  (sentence-level KB grounding)│    Removes ungrounded claims
+│  sentence-level KB grounding │    Removes ungrounded claims
 └─────────┬────────────────────┘
           │
           ▼
 ┌──────────────────────────────┐
 │  6. Confidence Scorer  ✓     │  ← VERIFICATION LAYER 2
-│  (multi-signal routing)       │    Routes to auto-approve / review / escalate
+│  (multi-signal routing)      │    Routes to auto-approve / review / escalate
 └─────────┬────────────────────┘
           │
           ▼
