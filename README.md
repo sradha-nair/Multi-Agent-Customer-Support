@@ -47,7 +47,7 @@ Input ticket
      │
      ▼
 ┌─────────────────────┐
-│  1. Novelty Detector│  ← Pre-filter: is this ticket in-distribution?
+│  1. Novelty Detector│  ← Pre-filter
 └─────────┬───────────┘
           │
           ▼
